@@ -4,6 +4,7 @@ import com.playtomic.tests.wallet.entity.Transaction;
 import com.playtomic.tests.wallet.entity.Wallet;
 import com.playtomic.tests.wallet.enums.TransactionStatus;
 import com.playtomic.tests.wallet.enums.TransactionType;
+import com.playtomic.tests.wallet.exceptions.PaymentRejectedException;
 import com.playtomic.tests.wallet.repository.TransactionRepository;
 import com.playtomic.tests.wallet.repository.WalletRepository;
 import com.playtomic.tests.wallet.service.Payment;
@@ -11,7 +12,9 @@ import com.playtomic.tests.wallet.service.StripeService;
 import com.playtomic.tests.wallet.service.WalletService;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 
 import java.math.BigDecimal;
 
@@ -61,6 +64,17 @@ public class WalletServiceImpl implements WalletService {
       // 6. Mark transaction SUCCESS
       tx.setStatus(TransactionStatus.SUCCESS);
       return transactionRepository.save(tx);
+
+    } catch (HttpClientErrorException e) {
+      if (e.getStatusCode() == HttpStatus.UNPROCESSABLE_ENTITY) {
+        tx.setStatus(TransactionStatus.FAILED);
+        transactionRepository.save(tx);
+        throw new PaymentRejectedException("Payment rejected by processor");
+      }
+
+      tx.setStatus(TransactionStatus.FAILED);
+      transactionRepository.save(tx);
+      throw new RuntimeException("Payment service error: " + e.getMessage(), e);
 
     } catch (Exception e) {
       tx.setStatus(TransactionStatus.FAILED);
