@@ -12,12 +12,14 @@ import com.playtomic.tests.wallet.service.StripeService;
 import com.playtomic.tests.wallet.service.WalletService;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 
 import java.math.BigDecimal;
 
+@Log4j2
 @Service
 public class WalletServiceImpl implements WalletService {
 
@@ -66,12 +68,13 @@ public class WalletServiceImpl implements WalletService {
       return transactionRepository.save(tx);
 
     } catch (HttpClientErrorException e) {
-      if (e.getStatusCode() == HttpStatus.UNPROCESSABLE_ENTITY) {
+      if (e.getStatusCode().value() == HttpStatus.UNPROCESSABLE_ENTITY.value()) {
         tx.setStatus(TransactionStatus.FAILED);
         transactionRepository.save(tx);
         throw new PaymentRejectedException("Payment rejected by processor");
       }
 
+      log.info("dljkjfdakllfj 2");
       tx.setStatus(TransactionStatus.FAILED);
       transactionRepository.save(tx);
       throw new RuntimeException("Payment service error: " + e.getMessage(), e);
