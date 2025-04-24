@@ -1,10 +1,12 @@
 package com.playtomic.tests.wallet.entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+@Data
 @Entity
 @Table(name = "wallets")
 public class Wallet {

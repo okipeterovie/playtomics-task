@@ -3,10 +3,12 @@ package com.playtomic.tests.wallet.entity;
 import com.playtomic.tests.wallet.enums.TransactionStatus;
 import com.playtomic.tests.wallet.enums.TransactionType;
 import jakarta.persistence.*;
+import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+@Data
 @Entity
 @Table(name = "transactions")
 public class Transaction {
