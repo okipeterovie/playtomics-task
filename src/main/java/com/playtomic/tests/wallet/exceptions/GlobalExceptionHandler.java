@@ -1,6 +1,7 @@
 package com.playtomic.tests.wallet.exceptions;
 
 import jakarta.persistence.EntityNotFoundException;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.Map;
 
+@Log4j2
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -39,6 +41,7 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(Exception.class)
   @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
   public Map<String, String> handleOtherErrors(Exception ex) {
-    return Map.of("error", "Unexpected error: " + ex.getMessage());
+    log.info("Ran into an unexpected error: {}", ex.getMessage());
+    return Map.of("error", "Unexpected error: Please contact support");
   }
 }
