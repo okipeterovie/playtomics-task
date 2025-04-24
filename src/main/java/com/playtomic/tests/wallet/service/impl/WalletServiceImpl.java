@@ -12,6 +12,7 @@ import com.playtomic.tests.wallet.service.Payment;
 import com.playtomic.tests.wallet.service.StripeService;
 import com.playtomic.tests.wallet.service.WalletService;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.transaction.Transactional;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.http.HttpStatus;
@@ -91,7 +92,14 @@ public class WalletServiceImpl implements WalletService {
       transactionRepository.save(tx);
       throw new RuntimeException("Payment service error: " + e.getMessage(), e);
 
-    } catch (Exception e) {
+    } catch (OptimisticLockException e) {
+      // Handle concurrency conflict here
+      tx.setStatus(TransactionStatus.FAILED);
+      transactionRepository.save(tx);
+
+      throw new RuntimeException("Concurrency conflict: Wallet balance update failed due to concurrent modification.", e);
+
+    }catch (Exception e) {
       tx.setStatus(TransactionStatus.FAILED);
       transactionRepository.save(tx);
       throw new RuntimeException("Payment failed: " + e.getMessage());

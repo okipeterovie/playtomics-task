@@ -9,6 +9,9 @@ import com.playtomic.tests.wallet.repository.WalletRepository;
 import com.playtomic.tests.wallet.service.Payment;
 import com.playtomic.tests.wallet.service.StripeService;
 import com.playtomic.tests.wallet.service.WalletService;
+import jakarta.persistence.OptimisticLockException;
+import jakarta.transaction.Transactional;
+import lombok.extern.log4j.Log4j2;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -16,15 +19,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+@Log4j2
 class WalletServiceTest {
 
   private WalletRepository walletRepository;
@@ -83,7 +86,7 @@ class WalletServiceTest {
 
     assertEquals("Idempotency key is required", exception.getMessage());
   }
-  
+
   @Test
   void topUp_shouldIncreaseBalanceAndCreateTransaction() {
     Wallet wallet = new Wallet();
@@ -194,4 +197,66 @@ class WalletServiceTest {
     // Ensure that balance didn't increase twice
     assertTrue(wallet.getBalance().compareTo(BigDecimal.valueOf(100)) <= 0);
   }
+
+  @Test
+  @Transactional
+  public void testOptimisticLockingScenario() throws InterruptedException, ExecutionException {
+    Wallet wallet = new Wallet();
+    wallet.setId(1L);
+    wallet.setUserId(1L);
+    wallet.setBalance(BigDecimal.valueOf(100.00));
+    wallet.setVersion(1L);
+
+    TopUpRequest topUpRequest = new TopUpRequest(
+        BigDecimal.valueOf(100),
+        "4111111111111111",
+        "concurrent-key"
+    );
+
+    when(walletRepository.findById(1L)).thenReturn(Optional.of(wallet));
+    when(transactionRepository.save(any())).thenReturn(new Transaction());
+    when(stripeService.charge(anyString(), any())).thenReturn(new Payment("stripe-concurrent"));
+
+    // This specific mock will interfere with others unless reset
+    when(walletRepository.save(any(Wallet.class))).thenAnswer(invocation -> {
+      Wallet w = invocation.getArgument(0);
+      if (w.getVersion() == 2L) {
+        throw new OptimisticLockException("Version conflict");
+      }
+      return w;
+    });
+
+    Callable<Void> firstTransaction = () -> {
+      walletService.topUpWallet(1L, topUpRequest);
+      return null;
+    };
+
+    Callable<Void> secondTransaction = () -> {
+      wallet.setVersion(2L);
+      try {
+        walletService.topUpWallet(1L, topUpRequest);
+      } catch (OptimisticLockException e) {
+        log.info("Expected OptimisticLockException: " + e.getMessage());
+      }
+      return null;
+    };
+
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    List<Callable<Void>> tasks = List.of(firstTransaction, secondTransaction);
+    List<Future<Void>> results = executor.invokeAll(tasks);
+
+    for (Future<Void> result : results) {
+      Exception exception = assertThrows(ExecutionException.class, () -> {
+        // Code that should throw the exception
+        result.get();
+      });
+      assertTrue(exception.getMessage().contains("Concurrency conflict: Wallet balance update failed due to concurrent modification."));
+    }
+
+    verify(transactionRepository, times(4)).save(any(Transaction.class));
+
+    // ✅ Clean up or reset mocks if needed here
+    reset(walletRepository);
+  }
 }
+
