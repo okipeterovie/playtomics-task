@@ -1,6 +1,5 @@
 package com.playtomic.tests.wallet;
 
-
 import com.playtomic.tests.wallet.entity.Wallet;
 import com.playtomic.tests.wallet.repository.TransactionRepository;
 import com.playtomic.tests.wallet.repository.WalletRepository;

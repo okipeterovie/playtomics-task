@@ -1,5 +1,6 @@
 package com.playtomic.tests.wallet.service.impl;
 
+import com.playtomic.tests.wallet.dto.TopUpRequest;
 import com.playtomic.tests.wallet.entity.Transaction;
 import com.playtomic.tests.wallet.entity.Wallet;
 import com.playtomic.tests.wallet.enums.TransactionStatus;
@@ -34,9 +35,21 @@ public class WalletServiceImpl implements WalletService {
   }
 
   @Transactional
-  public Transaction topUpWallet(Long walletId, BigDecimal amount, String cardNumber, String idempotencyKey) {
+  public Transaction topUpWallet(Long walletId, TopUpRequest topUpRequest) {
+    if (topUpRequest.amount().compareTo(BigDecimal.valueOf(0.01)) < 0) {
+      throw new IllegalArgumentException("Amount must be greater than 0");
+    }
+
+    if (topUpRequest.cardNumber().isBlank()) {
+      throw new IllegalArgumentException("Card number is required");
+    }
+
+    if (topUpRequest.idempotencyKey().isBlank()) {
+      throw new IllegalArgumentException("Idempotency key is required");
+    }
+
     // 1. Check for existing transaction (idempotency)
-    transactionRepository.findByIdempotencyKey(idempotencyKey)
+    transactionRepository.findByIdempotencyKey(topUpRequest.idempotencyKey())
         .ifPresent(existing -> {
           throw new IllegalStateException("Duplicate request");
         });
@@ -48,19 +61,19 @@ public class WalletServiceImpl implements WalletService {
     // 3. Create transaction record (PENDING)
     Transaction tx = new Transaction();
     tx.setWallet(wallet);
-    tx.setAmount(amount);
+    tx.setAmount(topUpRequest.amount());
     tx.setType(TransactionType.TOPUP);
     tx.setStatus(TransactionStatus.PENDING);
-    tx.setIdempotencyKey(idempotencyKey);
+    tx.setIdempotencyKey(topUpRequest.idempotencyKey());
     tx = transactionRepository.save(tx);
 
     try {
       // 4. Call payment gateway
-      Payment payment = stripeService.charge(cardNumber, amount);
+      Payment payment = stripeService.charge(topUpRequest.cardNumber(), topUpRequest.amount());
       tx.setExternalReference(payment.getId());
 
       // 5. Update wallet balance
-      wallet.setBalance(wallet.getBalance().add(amount));
+      wallet.setBalance(wallet.getBalance().add(topUpRequest.amount()));
       walletRepository.save(wallet);
 
       // 6. Mark transaction SUCCESS
@@ -74,7 +87,6 @@ public class WalletServiceImpl implements WalletService {
         throw new PaymentRejectedException("Payment rejected by processor");
       }
 
-      log.info("dljkjfdakllfj 2");
       tx.setStatus(TransactionStatus.FAILED);
       transactionRepository.save(tx);
       throw new RuntimeException("Payment service error: " + e.getMessage(), e);

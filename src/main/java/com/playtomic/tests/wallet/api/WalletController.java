@@ -35,14 +35,8 @@ public class WalletController {
   @PostMapping("/{id}/top-up")
   public ResponseEntity<TransactionDto> topUpWallet(
       @PathVariable Long id,
-      @RequestBody TopUpRequest request
-  ) {
-    Transaction transaction = walletService.topUpWallet(
-        id,
-        request.amount(),
-        request.cardNumber(),
-        request.idempotencyKey()
-    );
+      @RequestBody TopUpRequest request) {
+    Transaction transaction = walletService.topUpWallet(id, request);
     return ResponseEntity.status(HttpStatus.CREATED).body(TransactionDto.from(transaction));
   }
 }
